@@ -36,6 +36,7 @@ http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sft
 			<error-mapping targetType="APP:BADREQUEST" />
 		</validation:is-number>
 		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="978fd750-b234-4f8b-8052-c8a058b200c9" variableName="solicitud"/>
+		<!-- [STUDIO:"Set Variable"]<set-variable value="#[attributes.correlationId&#93;" doc:name="Set Variable" doc:id="8bde2cc1-72ee-4ccd-aecc-0e4408c7ffce" variableName="correlationId"/> [STUDIO] -->
 		<logger level="INFO" doc:name="Logger" doc:id="2f10c504-46d8-44b5-a421-aaf16ef81a49" message="Solicitud recibida. correlationId=#[correlationId] metodo=#[attributes.method] path=#[attributes.requestPath]"/>
 		<db:insert doc:name="Insert" doc:id="a1c7523a-d9e5-4c53-b62c-0bcb16b7515e" config-ref="Database_Config" autoGenerateKeys="true" target="solicitudId">
 			<db:sql ><![CDATA[INSERT INTO solicitudes (
@@ -67,7 +68,7 @@ output application/json indent=true
 	status: "SUCCESS",
     mensaje: "Solicitud procesada y almacenada correctamente",
 	idSolicitud: vars.solicitudId.generatedKeys.GENERATED_KEY default null,
-	idCorrelacion: attributes.correlationId,
+	idCorrelacion: correlationId,
 	clienteId: vars.solicitud.clienteId,
 	tipo: vars.solicitud.tipo,
     descripcion: vars.solicitud.descripcion,
