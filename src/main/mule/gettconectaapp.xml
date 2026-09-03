@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tracing="http://www.mulesoft.org/schema/mule/tracing" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/tracing http://www.mulesoft.org/schema/mule/tracing/current/mule-tracing.xsd">
+	<flow name="gettconectaappFlow" doc:id="28164fd0-6bc8-402d-9b78-e555499b79fb" >
+		<http:listener doc:name="Listener" doc:id="2293bdea-8bb6-4ea1-abb3-1468500fe1bc" config-ref="HTTP_Listener_config" path="/api/v1/solicitudes/{id}" allowedMethods="GET">
+			<http:response statusCode="#[vars.httpStatus default 200]" />
+		</http:listener>
+		<logger level="INFO" doc:name="Logger" doc:id="cb51fe23-9bba-47a8-ac93-5db19c57be22" message="Consulta recibida. correlationId=#[correlationId] idSolicitud=#[attributes.uriParams.id]"/>
+		<db:select doc:name="Select" doc:id="44d154bb-41d2-4b4f-b5cf-415ecbc23a9d" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT
+    id,
+    cliente_id,
+    tipo,
+    descripcion,
+    fecha_registro
+FROM solicitudes
+WHERE id = :id]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+    id: attributes.uriParams.id as Number
+}]]]></db:input-parameters>
+		</db:select>
+		<choice doc:name="Choice" doc:id="73db4c1c-f737-4532-86f7-ae1cd1407c84" >
+			<when expression="sizeOf(payload) &gt; 0">
+				<logger level="INFO" doc:name="Logger" doc:id="5d63a4ed-10f9-4c53-8d06-685193affb90" message="Consultando solicitud. correlationId=#[correlationId] idSolicitud=#[attributes.uriParams.id]" />
+				<set-variable value="#[payload[0]]" doc:name="Set Variable" doc:id="58f91390-218a-4936-95fc-742a657e608f" variableName="solicitud"/>
+				<try doc:name="Try" doc:id="19295850-f709-4cad-b3b7-97aa24a1b8c6" >
+					<file:read doc:name="Read" doc:id="30cd7f62-5ce1-45ff-88e7-71095f68c0bc" path="#['./output/solicitud-' ++ (vars.solicitud.id as String) ++ '.json']" target="solicitudFile" targetValue="#[payload[0]]" />
+					<error-handler doc:id="34efe34d-10db-42a4-b456-43a67c7a3ce1" >
+						<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="441524d3-2ad5-4d99-83e3-e569f4143be6" >
+							<set-variable value="#[false]" doc:name="Set Variable" doc:id="6b8be213-712c-41a4-ad3e-1852dbfb200f" variableName="archivoEncontrado"/>
+						</on-error-continue>
+					</error-handler>
+				</try>
+				<logger level="INFO" doc:name="Logger" doc:id="e355cc02-3e44-4277-ab19-ee99772bdec3" message="Archivo local consultado. correlationId=#[correlationId] idSolicitud=#[attributes.uriParams.id]"/>
+				<ee:transform doc:name="Transform Message" doc:id="18a27e52-cab8-4dfc-9402-4e105c3d41ab" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    idSolicitud: vars.solicitud.id,
+    clienteId: vars.solicitud.cliente_id,
+    tipo: vars.solicitud.tipo,
+    descripcion: vars.solicitud.descripcion,
+    fechaCreacion: vars.solicitud.fecha_registro,
+    archivoLocal: {
+        existe:  vars.archivoEncontrado default true,
+        nombre: "solicitud-" ++ (vars.solicitud.id as String) ++ ".json"
+    }
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="d7380662-da6d-4e17-89d7-9f2186b6aa1d" message="Solicitud no encontrada. correlationId=#[correlationId] idSolicitud=#[attributes.uriParams.id]"/>
+				<ee:transform doc:name="Transform Message" doc:id="b8bb8d7d-4a40-42e9-99f7-9737d3556ec7" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    error: "Solicitud no encontrada",
+    mensaje: "No existe una solicitud con el identificador proporcionado.",
+    idSolicitud: attributes.uriParams.id
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<set-variable value="404" doc:name="Set Variable" doc:id="7ab10efe-2093-45f7-8188-dbc287573c3d" variableName="httpStatus"/>
+			</otherwise>
+		</choice>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="60a521f5-f1a2-4a3b-a5c8-9e5104fd75b9" >
+				<logger level="INFO" doc:name="Logger" doc:id="62cbe69a-307e-4e7c-80ed-05560e85d8f2" message="Error en solicitud. correlationId=#[correlationId] tipo=#[error.errorType] detalle=#[error.description]"/>
+				<ee:transform doc:name="Transform Message" doc:id="ab728da1-607b-4328-954b-8864023d7977" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    error: "InternalError",
+    detail: error.description
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<set-variable value="500" doc:name="Set Variable" doc:id="b6ab91c5-dd74-4da5-961c-e4ec9b266d7a" variableName="httpStatus"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+</mule>

@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp" xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:validation="http://www.mulesoft.org/schema/mule/validation" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="3c7b76e9-f228-4721-8d2a-7e2d08817c91" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="977b2487-4778-4f0c-a8a0-a5a1df109b28" >
+		<db:my-sql-connection host="${db.host}" port="${db.port}" user="${db.user}" password="${db.password}" database="${db.name}" />
+	</db:config>
+	<configuration-properties doc:name="Configuration properties" doc:id="00114162-4d13-4ce0-a56d-ab5c96dc171e" file="config.yaml" />
+	<sftp:config name="SFTP_Config" doc:name="SFTP Config" doc:id="4ee37868-50d4-41ee-a169-e202fdb6e301" >
+		<sftp:connection host="${sftp.host}" username="${sftp.user}" password="${sftp.pass}" prngAlgorithm="SHA1PRNG" port="${sftp.port}"/>
+	</sftp:config>
+	<flow name="tconectaappFlow" doc:id="a43fe0a5-8ff0-4711-9a8e-570ab1f5209a" >
+		<http:listener doc:name="Listener" doc:id="3ab5631b-d40d-4eca-b520-4c16286e739a" allowedMethods="POST" config-ref="HTTP_Listener_config" path="/api/v1/solicitudes">
+			<http:response statusCode="#[vars.httpStatus default 200]" />
+			<http:error-response statusCode="#[vars.httpStatus default 400]" />
+		</http:listener>
+		<validation:is-not-blank-string doc:name="Is not blank descripcion" doc:id="a34ecfe6-8f0c-41ec-9480-8ea1f1d8bd94" value="#[payload.descripcion]" message='"El campo \"descripcion\" debe contener información"'>
+			<error-mapping targetType="APP:BADREQUEST" />
+		</validation:is-not-blank-string>
+		<validation:is-not-blank-string doc:name="Is not blank tipo" doc:id="291eba04-c99f-4af1-a1cf-0f973015afe6" value="#[output application/java&#10;---&#10;payload.tipo]" message='#["El campo \"tipo\" debe contener información"]'>
+			<error-mapping sourceType="VALIDATION:BLANK_STRING" targetType="APP:BLANK" />
+			<error-mapping sourceType="STREAM_MAXIMUM_SIZE_EXCEEDED" targetType="APP:MAXSIZEED" />
+			<error-mapping sourceType="EXPRESSION" targetType="APP:EXPRESSION" />
+		</validation:is-not-blank-string>
+		<validation:is-number numberType="INTEGER" doc:name="Is number" doc:id="231a10c6-9e4a-4baa-a286-d0977eb8236f" value="#[payload.clienteId]" message='#["El campo debe ser un valor numérico válido"]' minValue="0" maxValue="99999">
+			<error-mapping targetType="APP:BADREQUEST" />
+		</validation:is-number>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="978fd750-b234-4f8b-8052-c8a058b200c9" variableName="solicitud"/>
+		<logger level="INFO" doc:name="Logger" doc:id="2f10c504-46d8-44b5-a421-aaf16ef81a49" message="Solicitud recibida. correlationId=#[correlationId] metodo=#[attributes.method] path=#[attributes.requestPath]"/>
+		<db:insert doc:name="Insert" doc:id="a1c7523a-d9e5-4c53-b62c-0bcb16b7515e" config-ref="Database_Config" autoGenerateKeys="true" target="solicitudId">
+			<db:sql ><![CDATA[INSERT INTO solicitudes (
+	cliente_id,
+	tipo,
+	descripcion,
+	correlation_id
+)
+VALUES (
+	:clienteId,
+	:tipo,
+	:descripcion,
+	:correlatorId
+)]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	clienteId: vars.solicitud.clienteId,
+	tipo: vars.solicitud.tipo,
+	descripcion: vars.solicitud.descripcion,
+	correlatorId: correlationId
+}]]]></db:input-parameters>
+		</db:insert>
+		<logger level="INFO" doc:name="Logger" doc:id="a544bbc4-8755-45ee-9f52-0dc9282a5f99" message="Solicitud registrada en base de datos. idSolicitud=#[vars.solicitudId.generatedKeys.GENERATED_KEY default null] correlationId=#[correlationId]"/>
+		<ee:transform doc:name="Transform Message" doc:id="0de3df87-6df1-4f73-b0bc-b59ee15cb6fd" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json indent=true
+---
+{
+	idSolicitud: vars.solicitudId.generatedKeys.GENERATED_KEY default null,
+	idCorrelacion: attributes.correlationId,
+	clienteId: vars.solicitud.clienteId,
+	tipo: vars.solicitud.tipo,
+    descripcion: vars.solicitud.descripcion,
+    estatus: "PROCESADO",
+    fechaCreacion: now()
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<file:write doc:name="Write" doc:id="52d55356-7290-4323-a1e0-acd7ee5b07aa" path="#['./output/solicitud-' ++ (vars.solicitudId.generatedKeys.GENERATED_KEY as String) ++ '.json']" mode="CREATE_NEW">
+			<error-mapping targetType="APP:TEST" />
+		</file:write>
+		<logger level="INFO" doc:name="Logger" doc:id="9cd47359-8a9a-49a5-995e-88fc242ceb9f" message="Solicitud registrada en archivo local. idSolicitud=#[vars.solicitudId.generatedKeys.GENERATED_KEY default null] correlationId=#[correlationId]" />
+		<sftp:write doc:name="Write" doc:id="e4ef550f-4d9b-41f9-953c-c985bc0a9dd9" config-ref="SFTP_Config" path="#['/outputsfpt/solicitud-' ++ (vars.solicitudId.generatedKeys.GENERATED_KEY as String) ++ '.json']" mode="CREATE_NEW"/>
+		<logger level="INFO" doc:name="Logger" doc:id="61d0f065-4c05-4b94-9191-07b5abbcfd08" message="Solicitud enviada a sftp. idSolicitud=#[vars.solicitudId.generatedKeys.GENERATED_KEY default null] correlationId=#[correlationId]"/>
+		<set-variable value="201" doc:name="Set Variable" doc:id="5523eaec-12fa-4f29-a95c-c9fa45ecc479" variableName="httpStatus"/>
+		<set-payload value="#[payload]" doc:name="Set Payload" doc:id="b8ffb971-1f09-4195-aff1-72af1e3f0e51" />
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="7fbd15af-7129-464a-b62e-cf22e50b5d82" type="APP:BADREQUEST, APP:BLANK, APP:EXPRESSION, APP:MAXSIZEED, APP:TEST, VALIDATION:BLANK_STRING, VALIDATION:INVALID_NUMBER, EXPRESSION">
+				<logger level="INFO" doc:name="Logger" doc:id="695618ed-873c-456a-808f-7f72fa670764" message="Error en solicitud. correlationId=#[correlationId] tipo=#[error.errorType] detalle=#[error.description]"/>
+				<ee:transform doc:name="Transform Message" doc:id="bbacacef-cbd4-4b78-99fc-088d483d2439" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    error: "InternalError",
+    detail: error.description
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<set-variable value="#[400]" doc:name="Set Variable" doc:id="171c3a72-f331-4ead-b899-b9334a2a96d9" variableName="httpStatus" />
+			</on-error-continue>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="a6ce9053-d89b-4543-9744-ec2dc8976031" >
+				<logger level="INFO" doc:name="Logger" doc:id="5fecd4d9-6d03-404d-b8d4-798d0462ecc5" message="Error en solicitud. correlationId=#[correlationId] tipo=#[error.errorType] detalle=#[error.description]"/>
+				<ee:transform doc:name="Transform Message" doc:id="cfa14b69-6692-4a05-899f-8384b193b521" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    error: "InternalError",
+    detail: error.description
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<set-variable value="#[500]" doc:name="Set Variable" doc:id="4dbe02bf-4a25-4743-a3b8-223f5a49ac2e" variableName="httpStatus"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+</mule>

@@ -1,0 +1,11 @@
+db:
+  host: {db.host}
+  port: {db.port}
+  user: {db.user}
+  password: {db.password}
+  name: {db.name}
+sftp:
+  host: {sftp.host}
+  port: "22"
+  user: {sftp.user}
+  pass: {sftp.pass}
