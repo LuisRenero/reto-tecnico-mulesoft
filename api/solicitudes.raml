@@ -1,0 +1,166 @@
+#%RAML 1.0
+title: tconectaapp
+mediaType:
+  - application/json
+version: "1.0"
+protocols:
+  - HTTP
+baseUri: http://localhost:8081/api/v1
+baseUriParameters:
+  newBaseUriParameter:
+    example: Example
+    type: string
+types:
+  SolicitudRequest:
+    description: Registro de solicitud
+    properties:
+      clienteId:
+        example: 1
+        type: number
+        maximum: 99999
+        format: int
+      tipo:
+        enum:
+          - ALTA
+          - CAMBIO
+          - BAJA
+        example: ALTA
+        type: string
+      descripcion:
+        example: Solicitud de alta
+        type: string
+  SolicitudPostResponse:
+    description: Respuesta de registro de solicitud
+    properties:
+      status:
+        description: Estatus de ejecución del API
+        example: SUCCESS
+        type: string
+      mensaje:
+        description: Mensaje de respuesta del API
+        example: Solicitud procesada y almacenada correctamente
+        type: string
+      idSolicitud:
+        description: Identificador de solicitud
+        example: 1
+        type: number
+        maximum: 99999
+        format: int
+      idCorrelacion:
+        description: Identificador transacción
+        example: ac1f0c50-a7d3-11f1-9a2f-fa3dc6d9953e
+        type: string
+      clienteId:
+        description: Identificador de cliente
+        example: 1
+        type: number
+        format: int
+      tipo:
+        description: Tipo de solicitud
+        enum:
+          - ALTA
+          - BAJA
+          - CAMBIO
+        example: CAMBIO
+        type: string
+      estatus:
+        description: estatus registrado en BD
+        example: PROCESADO
+        type: string
+      fechaCreacion:
+        description: Fecha de registro
+        example: 2026-09-03T14:11:42.4770033-06:00
+        type: string
+  solicitudGetResponse:
+    description: Respuesta de consulta de registro para una solicitud
+    properties:
+      status:
+        description: estatus de consulta (API)
+        example: SUCCESS
+        type: string
+      mensaje:
+        description: Mensaje de respuesta del API
+        example: Solicitud consultada correctamente
+        type: string
+      idSolicitud:
+        description: Identificador de solicitud consultada
+        example: 1
+        type: number
+        maximum: 99999
+        format: int
+      clienteId:
+        description: Identificador de cliente que realizó el registro
+        example: 1
+        type: number
+        maximum: 99999
+        format: int
+      tipo:
+        description: Tipo de registro
+        enum:
+          - ALTA
+          - BAJA
+          - CAMBIO
+        example: ALTA
+        type: string
+      descripcion:
+        description: Mensaje de descripción del registro
+        example: Solicitud de alta
+        type: string
+      archivoLocal:
+        description: Objeto con información de la consulta de archivo relacionada al registro consultado
+        properties:
+          existe:
+            description: Bandera que indica si el archivo fue encontrado en el sistema
+            example: true
+            type: boolean
+          nombre:
+            description: Nombre del archivo que se ha consultado
+            example: solicitud-39.json
+            type: string
+  ErrorResponse:
+    description: Respuesta de error
+    properties:
+      error:
+        description: Mensaje de error
+        example: InternalError
+        type: string
+      detail:
+        description: Descripción del error
+        example: No existe una solicitud con el identificador proporcionado
+        type: string
+/solicitudes:
+  post:
+    displayName: Crear solicitud
+    description: Creación e ingesta de nueva solicitud en MySQL, archivo local y SFTP
+    body:
+      example:
+        strict: true
+        value:
+          clienteId: "101"
+          tipo: ALTA
+          descripcion: Solicitud de alta
+      type: object
+    responses:
+      "201":
+        body:
+          type: object
+      "400":
+        description: Bad Request - Falta alguno de los campos obligatorios
+      "500":
+        description: Internal Server Error - Error en SFTP, BD o Escritura Local
+    securedBy: []
+  get:
+    displayName: Consultar solicitud
+    description: Consulta el detalle de una solicitud existente en MySQL.
+    queryParameters:
+      id:
+        example: Example
+        type: string
+    responses:
+      "200":
+        description: Respuesta éxitosa
+      "404":
+        description: Not Found - No existe la solicitud con el ID provisto
+      "500":
+        description: Internal Server Error
+    securedBy: []
