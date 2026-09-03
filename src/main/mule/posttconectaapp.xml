@@ -64,6 +64,8 @@ VALUES (
 output application/json indent=true
 ---
 {
+	status: "SUCCESS",
+    mensaje: "Solicitud procesada y almacenada correctamente",
 	idSolicitud: vars.solicitudId.generatedKeys.GENERATED_KEY default null,
 	idCorrelacion: attributes.correlationId,
 	clienteId: vars.solicitud.clienteId,
